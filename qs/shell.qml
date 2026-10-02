@@ -13,7 +13,10 @@ ShellRoot {
     property bool translating: false
     property string sttState: "notStarted" // notStarted | idle | listening | processing
     property real micLevel: 0.0
-    property string translationBackend: "checking" // checking | google | libre
+    property string translationBackend: "" // "" | "google" | "libre"
+    property bool googleFailedInSession: false
+    property bool aiPolishEnabled: true
+    property bool isPolishing: false
 
     Colors { id: colors }
     HyprIPC { id: hypr }
@@ -22,9 +25,11 @@ ShellRoot {
         inputText = ""
         previewText = ""
         inputField.text = ""
+        translationBackend = ""
+        googleFailedInSession = false
+        isPolishing = false
         active = true
         win.visible = true
-        checkTranslationBackend()
         sttKeepAliveTimer.stop() // reopened in time — cancel any pending unload
         startSttDaemon()
     }
@@ -48,42 +53,30 @@ ShellRoot {
         }
     }
 
-    function checkTranslationBackend() {
-        translationBackend = "checking"
-        const probe = new XMLHttpRequest()
-        probe.onreadystatechange = function () {
-            if (probe.readyState === XMLHttpRequest.DONE) {
-                translationBackend = (probe.status === 200) ? "google" : "libre"
-                console.log("translator: backend check ->", translationBackend, "(status", probe.status + ")")
-                if (inputText.trim().length > 0) requestTranslation() // refresh preview with the right backend
-            }
-        }
-        probe.onerror = function () {
-            translationBackend = "libre"
-            console.log("translator: backend check -> libre (network error reaching google)")
-        }
-        probe.open("GET", "https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=uk&dt=t&q=test")
-        probe.send()
-    }
-
     Timer {
         id: debounce
         interval: 550 // wait for an actual pause in typing, not just between keystrokes
         onTriggered: root.requestTranslation()
     }
-    onInputTextChanged: debounce.restart()
+
+    onInputTextChanged: {
+        // Only trigger translation debounce when typing manually, not while listening to voice or polishing
+        if (sttState !== "listening" && !isPolishing) {
+            debounce.restart()
+        }
+    }
 
     function requestTranslation() {
         if (inputText.trim().length === 0) {
             previewText = ""
+            translationBackend = ""
             return
         }
-        if (translationBackend === "checking") return // debounce will fire again once check resolves
         translating = true
-        if (translationBackend === "google") {
-            requestTranslationGoogle()
-        } else {
+        if (googleFailedInSession) {
             requestTranslationLibre()
+        } else {
+            requestTranslationGoogle()
         }
     }
 
@@ -98,6 +91,7 @@ ShellRoot {
                 console.log("translator: google request done, status =", xhr.status)
                 if (xhr.status === 200) {
                     translating = false
+                    translationBackend = "google"
                     try {
                         const parsed = JSON.parse(xhr.responseText)
                         previewText = parsed[0].map(seg => seg[0]).join("")
@@ -105,14 +99,17 @@ ShellRoot {
                         console.warn("translator: could not parse google response:", e)
                     }
                 } else {
-                    // Google started rate-limiting mid-session — fall back for the rest of it
-                    console.warn("translator: google failed (status", xhr.status + "), switching to libre")
+                    // Google started rate-limiting or failed — switch to libre for this popup session
+                    console.warn("translator: google failed (status", xhr.status + "), switching to libre for this session")
+                    googleFailedInSession = true
                     translationBackend = "libre"
                     requestTranslationLibre()
                 }
             }
         }
         xhr.onerror = function () {
+            console.warn("translator: google network error, switching to libre for this session")
+            googleFailedInSession = true
             translationBackend = "libre"
             requestTranslationLibre()
         }
@@ -121,6 +118,7 @@ ShellRoot {
     }
 
     function requestTranslationLibre() {
+        translationBackend = "libre"
         const xhr = new XMLHttpRequest()
         xhr.onreadystatechange = function () {
             if (xhr.readyState === XMLHttpRequest.DONE) {
@@ -152,6 +150,33 @@ ShellRoot {
             target: hypr.targetLang,
             format: "text"
         }))
+    }
+
+    function handleVoiceFinalResult(text) {
+        if (!text || text.trim().length === 0) return
+        if (aiPolishEnabled) {
+            isPolishing = true
+            polishTimer.pendingText = text
+            if (sttProc.running) {
+                sttProc.write("POLISH:" + text + "\n")
+            }
+            polishTimer.restart()
+        } else {
+            requestTranslation()
+        }
+    }
+
+    Timer {
+        id: polishTimer
+        interval: 3500 // fallback if polish model is offline or taking too long
+        property string pendingText: ""
+        onTriggered: {
+            if (root.isPolishing) {
+                console.warn("translator: AI polish timeout fallback, translating raw text")
+                root.isPolishing = false
+                root.requestTranslation()
+            }
+        }
     }
 
     function shellQuote(s) {
@@ -198,6 +223,7 @@ ShellRoot {
             sttProc.running = false // sends SIGTERM
         }
         sttState = "notStarted"
+        isPolishing = false
         micLevel = 0.0
     }
 
@@ -222,6 +248,12 @@ ShellRoot {
                     root.sttState = "processing"
                 } else if (line.startsWith("LEVEL:")) {
                     root.micLevel = parseFloat(line.slice("LEVEL:".length)) || 0.0
+                } else if (line.startsWith("PARTIAL:")) {
+                    const partialText = line.slice("PARTIAL:".length)
+                    if (partialText.length > 0) {
+                        inputField.text = partialText
+                        inputField.cursorPosition = partialText.length
+                    }
                 } else if (line.startsWith("RESULT:")) {
                     root.sttState = "idle"
                     root.micLevel = 0.0
@@ -230,8 +262,19 @@ ShellRoot {
                         inputField.text = text
                         inputField.cursorPosition = text.length
                     }
+                    root.handleVoiceFinalResult(text)
+                } else if (line.startsWith("POLISHED:")) {
+                    polishTimer.stop()
+                    root.isPolishing = false
+                    const polished = line.slice("POLISHED:".length).trim()
+                    if (polished.length > 0) {
+                        inputField.text = polished
+                        inputField.cursorPosition = polished.length
+                    }
+                    root.requestTranslation()
                 } else if (line.startsWith("ERROR:")) {
                     root.sttState = "idle"
+                    root.isPolishing = false
                     root.micLevel = 0.0
                     console.warn("translator/STT:", line)
                 }
@@ -255,9 +298,9 @@ ShellRoot {
         if (sttState === "idle" || sttState === "notStarted") {
             sttProc.write("START:" + hypr.sourceLang + "\n")
         } else if (sttState === "listening") {
-            sttProc.write("STOP\n") // manual fallback stop
+            sttProc.write("STOP\n") // manual stop
         }
-        // "processing" -> ignore taps, nothing sensible to do
+        // "processing" or "polishing" -> ignore taps, nothing sensible to do
     }
 
     PanelWindow {
@@ -301,12 +344,37 @@ ShellRoot {
                     spacing: 8
 
                     Rectangle {
+                        id: inputContainer
                         Layout.fillWidth: true
                         Layout.preferredHeight: 48
                         radius: 16
                         color: colors.scheme.surfaceContainerHighest
-                        border.width: inputField.activeFocus ? 2 : 0
+                        border.width: root.isPolishing ? 2 : (inputField.activeFocus ? 2 : 0)
                         border.color: colors.scheme.primary
+                        clip: true
+
+                        // Animated Shimmer Wave for AI Polish
+                        Rectangle {
+                            id: shimmerWave
+                            visible: root.isPolishing
+                            width: 150
+                            height: parent.height
+                            anchors.verticalCenter: parent.verticalCenter
+                            gradient: Gradient {
+                                orientation: Gradient.Horizontal
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { position: 0.5; color: colors.scheme.primary; color.a: 0.35 }
+                                GradientStop { position: 1.0; color: "transparent" }
+                            }
+
+                            NumberAnimation on x {
+                                from: -150
+                                to: inputContainer.width + 150
+                                duration: 1100
+                                loops: Animation.Infinite
+                                running: root.isPolishing
+                            }
+                        }
 
                         TextInput {
                             id: inputField
@@ -332,7 +400,7 @@ ShellRoot {
                         radius: 24
                         color: {
                             if (root.sttState === "listening") return colors.scheme.errorContainer ?? colors.scheme.error
-                            if (root.sttState === "processing")
+                            if (root.sttState === "processing" || root.isPolishing)
                                 return colors.scheme.surfaceContainerHighest
                             return micArea.pressed ? colors.scheme.primary : colors.scheme.secondaryContainer
                         }
@@ -344,10 +412,10 @@ ShellRoot {
                         Text {
                             anchors.centerIn: parent
                             visible: root.sttState !== "listening"
-                            text: "mic"
+                            text: root.isPolishing ? "auto_awesome" : "mic"
                             font.family: "Material Symbols Rounded"
                             font.pixelSize: 22
-                            opacity: root.sttState === "processing" ? 0.5 : 1.0
+                            opacity: (root.sttState === "processing" || root.isPolishing) ? 0.7 : 1.0
                             color: micArea.pressed ? colors.scheme.onPrimary : colors.scheme.onSecondaryContainer
                         }
 
@@ -417,11 +485,51 @@ ShellRoot {
                         font.pixelSize: 11
                     }
 
+                    // "AI Polish" toggle badge
+                    Rectangle {
+                        id: polishBadge
+                        Layout.preferredHeight: 22
+                        Layout.preferredWidth: polishRow.implicitWidth + 14
+                        radius: 11
+                        color: root.aiPolishEnabled ? (colors.scheme.primaryContainer ?? "#3a3939") : "transparent"
+                        border.width: 1
+                        border.color: root.aiPolishEnabled ? colors.scheme.primary : colors.scheme.outlineVariant
+
+                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on border.color { ColorAnimation { duration: 150 } }
+
+                        RowLayout {
+                            id: polishRow
+                            anchors.centerIn: parent
+                            spacing: 4
+
+                            Text {
+                                text: "auto_awesome"
+                                font.family: "Material Symbols Rounded"
+                                font.pixelSize: 12
+                                color: root.aiPolishEnabled ? colors.scheme.primary : colors.scheme.outline
+                            }
+
+                            Text {
+                                text: "AI Polish"
+                                font.pixelSize: 11
+                                font.weight: root.aiPolishEnabled ? Font.DemiBold : Font.Normal
+                                color: root.aiPolishEnabled ? (colors.scheme.onPrimaryContainer ?? colors.scheme.onSurface) : colors.scheme.outline
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.aiPolishEnabled = !root.aiPolishEnabled
+                        }
+                    }
+
                     Item { Layout.fillWidth: true }
 
                     Text {
-                        visible: root.translationBackend !== "checking"
-                        text: root.translationBackend === "google" ? "Google" : "Local (LibreTranslate)"
+                        visible: root.translationBackend.length > 0 && root.previewText.length > 0
+                        text: root.translationBackend === "google" ? "Google" : "LibreTranslate"
                         color: colors.scheme.outline
                         font.pixelSize: 11
                     }
@@ -438,3 +546,4 @@ ShellRoot {
         }
     }
 }
+

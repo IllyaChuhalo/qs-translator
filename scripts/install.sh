@@ -39,6 +39,54 @@ python3 -m venv "$VENV_DIR"
 "$VENV_DIR"/bin/pip install --upgrade pip --quiet
 "$VENV_DIR"/bin/pip install -r "$REPO_DIR"/stt/requirements.txt
 
+echo "==> Hardware Acceleration & GPU Detection"
+HAS_NVIDIA=0
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    HAS_NVIDIA=1
+elif lspci 2>/dev/null | grep -iq 'nvidia'; then
+    HAS_NVIDIA=1
+fi
+
+HAS_AMD=0
+if lspci 2>/dev/null | grep -iE 'vga|3d|display' | grep -iq 'amd\|radeon'; then
+    HAS_AMD=1
+fi
+
+TARGET_ACCEL=""
+if [ -n "${ACCEL:-}" ]; then
+    TARGET_ACCEL="$ACCEL"
+elif [ -t 0 ] && [ "$HAS_NVIDIA" -eq 1 ]; then
+    GPU_NAME=$(command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -n1 || echo "NVIDIA GPU")
+    echo "  [+] $GPU_NAME detected!"
+    read -rp "  Enable NVIDIA CUDA GPU acceleration? (faster STT & AI polish) [Y/n]: " ans
+    if [[ "$ans" =~ ^[Nn] ]]; then
+        TARGET_ACCEL="cpu"
+    else
+        TARGET_ACCEL="cuda"
+    fi
+elif [ "$HAS_NVIDIA" -eq 1 ]; then
+    # Non-interactive default when NVIDIA is present
+    TARGET_ACCEL="cuda"
+elif [ "$HAS_AMD" -eq 1 ]; then
+    echo "  [i] AMD GPU detected."
+    echo "      Whisper STT (CTranslate2) runs with optimized multi-threaded CPU."
+    TARGET_ACCEL="cpu"
+else
+    echo "  [i] Using CPU inference (AVX2/int8)."
+    TARGET_ACCEL="cpu"
+fi
+
+if [ "$TARGET_ACCEL" = "cuda" ]; then
+    echo "  -> Installing NVIDIA CUDA 12 runtime packages (cublas, cudnn)..."
+    "$VENV_DIR"/bin/pip install nvidia-cublas-cu12 nvidia-cudnn-cu12
+    echo "  [OK] NVIDIA CUDA 12 runtime configured."
+else
+    echo "  -> Configured for CPU inference."
+fi
+
+echo "==> Setting up STT and AI Polish models"
+"$REPO_DIR"/scripts/download_models.sh
+
 cat <<'EOF'
 
 ==> Install done. Remaining manual steps:
