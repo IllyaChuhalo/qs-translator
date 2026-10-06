@@ -21,7 +21,7 @@ It runs as an independent Quickshell configuration (`qs -c translator`) — **ne
   - Toggled directly via the sparkles icon (`auto_awesome`) positioned inside the right side of the input field.
 - **Smart Translation Backend**: Uses Google Translate (free `gtx` endpoint) first; automatically fails over to a local [LibreTranslate](https://libretranslate.com/) Docker container if Google returns a rate limit (HTTP 429).
 - **Fast Action**: Pressing `Enter` copies the translation to the clipboard and automatically pastes it into the active window (`wl-copy` + `wtype`). `Escape` dismisses the popup without pasting.
-- **Adaptive Material 3 Palette**: Colors and radii are read directly from `ii`'s live `matugen` color palette (`colors.json`) upon wallpaper or theme changes.
+- **Adaptive Material 3 Palette**: Colors are resolved dynamically on open without daemon restart. Supports user-defined palettes (`~/.config/translator/colors.json` or `$TRANSLATOR_COLORS_PATH`), system/`ii` `matugen` palettes (`~/.local/state/quickshell/user/generated/colors.json`), and built-in dark Material 3 defaults.
 
 ---
 
@@ -125,14 +125,14 @@ hyprctl reload
 
 ## Configuration
 
-| Setting                  | File                 | Default                | Description                                              |
-| ------------------------ | -------------------- | ---------------------- | -------------------------------------------------------- |
-| Silence Threshold (RMS)  | `stt/stt_daemon.py`  | `0.032`                | Energy threshold separating speech from background noise |
-| Trailing Silence Timeout | `stt/stt_daemon.py`  | `550` ms               | Silence duration required to auto-stop recording         |
-| Daemon Keep-Alive        | `qs/shell.qml`       | `45000` ms             | Idle time before models unload after popup closes        |
-| Translation Debounce     | `qs/shell.qml`       | `550` ms               | Delay between text input and HTTP translation request    |
-| AI Polish Model          | `download_models.sh` | `Qwen 2.5 1.5B Q4_K_M` | Stored in `~/.local/share/translator/models/`            |
-| Matugen Color Palette    | `qs/Colors.qml`      | `colors.json`          | Path to `ii`'s live generated colors                     |
+| Setting                  | File                 | Default                                                                                  | Description                                              |
+| ------------------------ | -------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Silence Threshold (RMS)  | `stt/stt_daemon.py`  | `0.032`                                                                                  | Energy threshold separating speech from background noise |
+| Trailing Silence Timeout | `stt/stt_daemon.py`  | `550` ms                                                                                 | Silence duration required to auto-stop recording         |
+| Daemon Keep-Alive        | `qs/shell.qml`       | `45000` ms                                                                               | Idle time before models unload after popup closes        |
+| Translation Debounce     | `qs/shell.qml`       | `550` ms                                                                                 | Delay between text input and HTTP translation request    |
+| AI Polish Model          | `download_models.sh` | `Qwen 2.5 1.5B Q4_K_M`                                                                   | Stored in `~/.local/share/translator/models/`            |
+| Theme Color Palette      | `qs/Colors.qml`      | `$TRANSLATOR_COLORS_PATH` → `~/.config/translator/colors.json` → `ii` matugen → fallback | Configurable palette with dynamic reload on open         |
 
 ---
 
