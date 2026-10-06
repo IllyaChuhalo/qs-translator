@@ -18,13 +18,16 @@ if [ "$missing" = 1 ]; then
     echo "  -> install the missing binaries above before continuing (docker is only needed for the LibreTranslate fallback, see docs/LIBRETRANSLATE_SETUP.md)"
 fi
 
-echo "==> Checking for the ii-generated color palette"
-COLORS_JSON="$HOME/.local/state/quickshell/user/generated/colors.json"
-if [ ! -f "$COLORS_JSON" ]; then
-    echo "  WARNING: $COLORS_JSON not found."
-    echo "  This popup reads ii's live matugen color palette from that path."
-    echo "  If your ii install generates it somewhere else, edit qs/Colors.qml"
-    echo "  (search for 'colorsPath') before continuing."
+echo "==> Setting up theme color configuration"
+USER_CONFIG_DIR="$HOME/.config/translator"
+mkdir -p "$USER_CONFIG_DIR"
+if [ ! -f "$USER_CONFIG_DIR/colors.json" ]; then
+    if [ -f "$HOME/.local/state/quickshell/user/generated/colors.json" ]; then
+        echo "  [i] Detected existing ii/matugen color palette; widget will use it dynamically."
+    else
+        echo "  [i] Seeding default template to $USER_CONFIG_DIR/colors.json"
+        cp "$REPO_DIR/colors.example.json" "$USER_CONFIG_DIR/colors.json"
+    fi
 fi
 
 echo "==> Installing Quickshell config to $QS_DIR"

@@ -19,6 +19,7 @@ ShellRoot {
     property bool isPolishing: false
 
     function show() {
+        colors.refresh();
         inputText = "";
         previewText = "";
         inputField.text = "";
@@ -314,9 +315,9 @@ ShellRoot {
         implicitWidth: 480
         implicitHeight: card.height
         onVisibleChanged: {
-            if (visible) {
+            if (visible)
                 inputField.forceActiveFocus();
-            }
+
         }
 
         anchors {
