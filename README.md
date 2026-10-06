@@ -17,7 +17,7 @@ It runs as an independent Quickshell configuration (`qs -c translator`) — **ne
   - **Live Audio Visualizer**: 5-band dynamic volume visualizer animated in real time inside the mic button during recording.
 - **Local AI Polish (Qwen 2.5 1.5B Instruct GGUF)**:
   - Compact local SLM running asynchronously via `llama-cpp-python`.
-  - Removes conversational filler words (*ну*, *типу*, *короче* / *um*, *uh*, *like*), handles speech self-corrections, fixes recognition typos, restores missing Ukrainian apostrophes (*комп'ютер*, *зв'язок*, *пам'ять*), and formats punctuation before translation.
+  - Removes conversational filler words (_ну_, _типу_, _короче_ / _um_, _uh_, _like_), handles speech self-corrections, fixes recognition typos, restores missing Ukrainian apostrophes (_комп'ютер_, _зв'язок_, _пам'ять_), and formats punctuation before translation.
   - Toggled directly via the sparkles icon (`auto_awesome`) positioned inside the right side of the input field.
 - **Smart Translation Backend**: Uses Google Translate (free `gtx` endpoint) first; automatically fails over to a local [LibreTranslate](https://libretranslate.com/) Docker container if Google returns a rate limit (HTTP 429).
 - **Fast Action**: Pressing `Enter` copies the translation to the clipboard and automatically pastes it into the active window (`wl-copy` + `wtype`). `Escape` dismisses the popup without pasting.
@@ -36,6 +36,7 @@ cd translator
 ```
 
 During installation, the script will:
+
 1. Check for required system binaries (`pw-record`, `wtype`, `wl-copy`, `hyprctl`, `python3`, `qs`).
 2. Copy the interface and backend scripts to `~/.config/quickshell/translator/`.
 3. Create an isolated Python virtual environment at `~/.local/share/translator-stt-venv`.
@@ -56,6 +57,7 @@ end)
 ```
 
 Reload Hyprland:
+
 ```bash
 hyprctl reload
 ```
@@ -97,60 +99,78 @@ hyprctl reload
 
 ### STT & SLM Daemon Protocol (line-based over stdin / stdout)
 
-| Command (stdin) | Description |
-|---|---|
-| `START` | Begin audio recording with automatic language detection |
-| `START:<lang>` | Begin recording with a language hint (`START:uk` or `START:en`) |
-| `STOP` | Force-stop recording immediately and finalize transcription |
-| `POLISH:<text>` | Submit transcribed text to Qwen 2.5 for speech polish |
+| Command (stdin) | Description                                                     |
+| --------------- | --------------------------------------------------------------- |
+| `START`         | Begin audio recording with automatic language detection         |
+| `START:<lang>`  | Begin recording with a language hint (`START:uk` or `START:en`) |
+| `STOP`          | Force-stop recording immediately and finalize transcription     |
+| `POLISH:<text>` | Submit transcribed text to Qwen 2.5 for speech polish           |
 
-| Event (stdout) | Description |
-|---|---|
-| `LOADING` | Models started loading in the background |
-| `STREAM_READY` | Streaming Whisper base model ready |
-| `MODEL_READY` | Final transcription Whisper model ready |
-| `DEVICE:<device>` | Inference device being used (`cuda` or `cpu`) |
-| `POLISH_READY` | Qwen 2.5 SLM model ready |
-| `LISTENING` | PipeWire audio capture in progress |
-| `LEVEL:<0.0-1.0>` | Real-time audio amplitude for UI visualizer |
-| `PARTIAL:<text>` | Intermediate streaming transcription during active speech |
-| `PROCESSING` | Recording finished, running final pass transcription |
-| `RESULT:<text>` | Final transcribed text |
-| `POLISHED:<text>` | Cleaned, polished text returned from SLM |
-| `ERROR:<msg>` | Error notification |
+| Event (stdout)    | Description                                               |
+| ----------------- | --------------------------------------------------------- |
+| `LOADING`         | Models started loading in the background                  |
+| `STREAM_READY`    | Streaming Whisper base model ready                        |
+| `MODEL_READY`     | Final transcription Whisper model ready                   |
+| `DEVICE:<device>` | Inference device being used (`cuda` or `cpu`)             |
+| `POLISH_READY`    | Qwen 2.5 SLM model ready                                  |
+| `LISTENING`       | PipeWire audio capture in progress                        |
+| `LEVEL:<0.0-1.0>` | Real-time audio amplitude for UI visualizer               |
+| `PARTIAL:<text>`  | Intermediate streaming transcription during active speech |
+| `PROCESSING`      | Recording finished, running final pass transcription      |
+| `RESULT:<text>`   | Final transcribed text                                    |
+| `POLISHED:<text>` | Cleaned, polished text returned from SLM                  |
+| `ERROR:<msg>`     | Error notification                                        |
 
 ---
 
 ## Configuration
 
-| Setting | File | Default | Description |
-|---|---|---|---|
-| Silence Threshold (RMS) | `stt/stt_daemon.py` | `0.032` | Energy threshold separating speech from background noise |
-| Trailing Silence Timeout | `stt/stt_daemon.py` | `550` ms | Silence duration required to auto-stop recording |
-| Daemon Keep-Alive | `qs/shell.qml` | `45000` ms | Idle time before models unload after popup closes |
-| Translation Debounce | `qs/shell.qml` | `550` ms | Delay between text input and HTTP translation request |
-| AI Polish Model | `download_models.sh` | `Qwen 2.5 1.5B Q4_K_M` | Stored in `~/.local/share/translator/models/` |
-| Matugen Color Palette | `qs/Colors.qml` | `colors.json` | Path to `ii`'s live generated colors |
+| Setting                  | File                 | Default                | Description                                              |
+| ------------------------ | -------------------- | ---------------------- | -------------------------------------------------------- |
+| Silence Threshold (RMS)  | `stt/stt_daemon.py`  | `0.032`                | Energy threshold separating speech from background noise |
+| Trailing Silence Timeout | `stt/stt_daemon.py`  | `550` ms               | Silence duration required to auto-stop recording         |
+| Daemon Keep-Alive        | `qs/shell.qml`       | `45000` ms             | Idle time before models unload after popup closes        |
+| Translation Debounce     | `qs/shell.qml`       | `550` ms               | Delay between text input and HTTP translation request    |
+| AI Polish Model          | `download_models.sh` | `Qwen 2.5 1.5B Q4_K_M` | Stored in `~/.local/share/translator/models/`            |
+| Matugen Color Palette    | `qs/Colors.qml`      | `colors.json`          | Path to `ii`'s live generated colors                     |
 
 ---
 
 ## Manual Testing & Verification
 
 Run the Quickshell popup in a terminal to view live logs:
+
 ```bash
 qs -c translator
 ```
 
 In a separate terminal, toggle the popup surface:
+
 ```bash
 qs -c translator ipc call translator toggle
 ```
 
 Test the STT daemon standalone from the command line:
+
 ```bash
 ~/.local/share/translator-stt-venv/bin/python ~/.config/quickshell/translator/stt_daemon.py
 ```
+
 Type `START:uk`, speak a phrase into your microphone, and wait for silence detection or type `STOP`.
+
+---
+
+## Development & Code Quality
+
+Linting and code style checks are configured with **Ruff**, **qmlformat**, **Prettier**, and **commitlint**:
+
+```bash
+npm install        # Set up dev tools and git hooks (simple-git-hooks)
+npm run lint       # Run Python, QML, and formatting checks
+npm run format     # Auto-format all Python, QML, and markdown files
+```
+
+See [docs/conventions.md](docs/conventions.md) for branch naming, commit format, and PR guidelines.
 
 ---
 

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# Installs the translator popup onto a machine already running
-# end-4/dots-hyprland (ii). Safe to re-run — it just overwrites the
-# installed copies with what's in this repo checkout.
+# Installs the translator popup and configures Python environment and models.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

@@ -1,0 +1,28 @@
+{
+    "name": "qs-translator",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Quickshell popup translator with streaming STT and local AI speech polishing",
+    "type": "module",
+    "scripts": {
+        "git:hook:precommit": "./scripts/lint.sh",
+        "git:hook:commit": "commitlint --edit",
+        "lint:py": "ruff check . && ruff format --check .",
+        "format:py": "ruff check --fix . && ruff format .",
+        "format:qml": "qmlformat -i qs/*.qml",
+        "lint:format": "prettier --check \"**/*.{json,md,yml,yaml}\" --ignore-path .prettierignore",
+        "format": "npm run format:py && npm run format:qml && prettier --write \"**/*.{json,md,yml,yaml}\" --ignore-path .prettierignore",
+        "lint": "./scripts/lint.sh",
+        "prepare": "simple-git-hooks"
+    },
+    "devDependencies": {
+        "@commitlint/cli": "^19.7.1",
+        "@commitlint/config-conventional": "^19.7.1",
+        "prettier": "^3.5.0",
+        "simple-git-hooks": "^2.11.1"
+    },
+    "simple-git-hooks": {
+        "pre-commit": "npm run git:hook:precommit",
+        "commit-msg": "npm run git:hook:commit"
+    }
+}

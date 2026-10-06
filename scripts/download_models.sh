@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Downloads and prepares local STT (whisper.cpp) and SLM (Qwen 2.5) models
-# for the translator popup.
+# Downloads and verifies local STT and SLM models for the translator popup.
 set -euo pipefail
 
 MODELS_DIR="${TRANSLATOR_MODELS_DIR:-$HOME/.local/share/translator/models}"
