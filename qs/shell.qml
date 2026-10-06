@@ -363,7 +363,7 @@ ShellRoot {
                             gradient: Gradient {
                                 orientation: Gradient.Horizontal
                                 GradientStop { position: 0.0; color: "transparent" }
-                                GradientStop { position: 0.5; color: colors.scheme.primary; color.a: 0.35 }
+                                GradientStop { position: 0.5; color: Qt.alpha(colors.scheme.primary, 0.35) }
                                 GradientStop { position: 1.0; color: "transparent" }
                             }
 
@@ -378,10 +378,11 @@ ShellRoot {
 
                         TextInput {
                             id: inputField
-                            anchors.fill: parent
+                            anchors.left: parent.left
+                            anchors.right: polishBtn.left
                             anchors.leftMargin: 16
-                            anchors.rightMargin: 16
-                            verticalAlignment: TextInput.AlignVCenter
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
                             color: colors.scheme.onSurface
                             font.pixelSize: 16
                             clip: true
@@ -390,6 +391,36 @@ ShellRoot {
                             Keys.onEscapePressed: root.hideOnly()
                             Keys.onReturnPressed: root.hideAndCommit(
                                 root.previewText.length > 0 ? root.previewText : root.inputText)
+                        }
+
+                        // AI Polish toggle icon button inside inputContainer
+                        Rectangle {
+                            id: polishBtn
+                            anchors.right: parent.right
+                            anchors.rightMargin: 12
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 28
+                            height: 28
+                            radius: 14
+                            color: "transparent"
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "auto_awesome"
+                                font.family: "Material Symbols Rounded"
+                                font.pixelSize: 20
+                                color: root.aiPolishEnabled ? colors.scheme.primary : colors.scheme.outline
+                                opacity: root.aiPolishEnabled ? 1.0 : 0.45
+
+                                Behavior on opacity { NumberAnimation { duration: 150 } }
+                                Behavior on color { ColorAnimation { duration: 150 } }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: root.aiPolishEnabled = !root.aiPolishEnabled
+                            }
                         }
                     }
 
@@ -412,7 +443,7 @@ ShellRoot {
                         Text {
                             anchors.centerIn: parent
                             visible: root.sttState !== "listening"
-                            text: root.isPolishing ? "auto_awesome" : "mic"
+                            text: "mic"
                             font.family: "Material Symbols Rounded"
                             font.pixelSize: 22
                             opacity: (root.sttState === "processing" || root.isPolishing) ? 0.7 : 1.0
@@ -483,46 +514,6 @@ ShellRoot {
                         text: hypr.direction
                         color: colors.scheme.outline
                         font.pixelSize: 11
-                    }
-
-                    // "AI Polish" toggle badge
-                    Rectangle {
-                        id: polishBadge
-                        Layout.preferredHeight: 22
-                        Layout.preferredWidth: polishRow.implicitWidth + 14
-                        radius: 11
-                        color: root.aiPolishEnabled ? (colors.scheme.primaryContainer ?? "#3a3939") : "transparent"
-                        border.width: 1
-                        border.color: root.aiPolishEnabled ? colors.scheme.primary : colors.scheme.outlineVariant
-
-                        Behavior on color { ColorAnimation { duration: 150 } }
-                        Behavior on border.color { ColorAnimation { duration: 150 } }
-
-                        RowLayout {
-                            id: polishRow
-                            anchors.centerIn: parent
-                            spacing: 4
-
-                            Text {
-                                text: "auto_awesome"
-                                font.family: "Material Symbols Rounded"
-                                font.pixelSize: 12
-                                color: root.aiPolishEnabled ? colors.scheme.primary : colors.scheme.outline
-                            }
-
-                            Text {
-                                text: "AI Polish"
-                                font.pixelSize: 11
-                                font.weight: root.aiPolishEnabled ? Font.DemiBold : Font.Normal
-                                color: root.aiPolishEnabled ? (colors.scheme.onPrimaryContainer ?? colors.scheme.onSurface) : colors.scheme.outline
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.aiPolishEnabled = !root.aiPolishEnabled
-                        }
                     }
 
                     Item { Layout.fillWidth: true }
