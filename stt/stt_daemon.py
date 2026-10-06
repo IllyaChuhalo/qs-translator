@@ -1,49 +1,19 @@
 #!/usr/bin/env python3
-"""
-Resident STT and AI Polish daemon for the translator popup.
+"""STT and AI text polish resident daemon communicating via stdin/stdout."""
 
-Architecture:
-  - Streaming STT: Fast sub-second transcription with Whisper "base" in a background thread,
-    emitting real-time PARTIAL:<text> updates while the user speaks.
-  - Final STT: Whisper "medium" (on CUDA GPU ~0.7s) or "small" (on CPU) emitting RESULT:<text> on silence.
-  - AI Polish: Qwen 2.5 1.5B (GGUF) via llama-cpp cleaning fillers, hesitations,
-    typos, missing apostrophes, and punctuation on POLISH:<text>, emitting POLISHED:<text>.
-  - Low Latency: Decoupled PipeWire audio capture and inference threads.
-  - Hardware Acceleration: Automatic NVIDIA CUDA detection with dynamic library preloading;
-    falls back cleanly to multi-threaded CPU.
-
-Protocol (line-based over stdin/stdout):
-  stdin  START            -> begin recording, auto-detect language
-  stdin  START:<lang>     -> begin recording with language hint (e.g. START:uk)
-  stdin  STOP             -> force-stop recording early
-  stdin  POLISH:<text>    -> clean up transcription disfluencies, typos, and self-corrections
-
-  stdout LOADING          -> models started loading in background
-  stdout STREAM_READY     -> fast streaming Whisper model ready
-  stdout MODEL_READY      -> accurate final Whisper model ready
-  stdout DEVICE:<device>  -> device used (cuda / cpu)
-  stdout POLISH_READY     -> SLM polish model ready
-  stdout LISTENING        -> recording in progress
-  stdout LEVEL:<0.0-1.0>  -> audio amplitude for visualizer
-  stdout PARTIAL:<text>   -> real-time partial streaming transcript
-  stdout PROCESSING       -> recording stopped, finalizing transcript
-  stdout RESULT:<text>    -> final transcribed text
-  stdout POLISHED:<text>  -> cleaned/corrected sentence from AI Polish
-  stdout ERROR:<msg>      -> error message
-"""
-
-import os
-import sys
-import glob
 import ctypes
+import glob
+import os
 import subprocess
+import sys
 import threading
 import time
+
 import numpy as np
 
 
-# Pre-load CUDA/cuBLAS/cuDNN shared libraries from the virtualenv if present
 def _preload_nvidia_libs() -> None:
+    """Preloads CUDA runtime libraries from virtualenv site-packages if present."""
     venv_base = sys.prefix
     py_ver = f"python{sys.version_info.major}.{sys.version_info.minor}"
     nvidia_base = os.path.join(venv_base, "lib", py_ver, "site-packages", "nvidia")
@@ -60,10 +30,10 @@ def _preload_nvidia_libs() -> None:
 
 _preload_nvidia_libs()
 
-# Detect hardware acceleration capabilities
 cuda_available = False
 try:
     import ctranslate2
+
     if ctranslate2.get_cuda_device_count() > 0:
         cuda_available = True
 except Exception:
@@ -71,11 +41,11 @@ except Exception:
 
 SAMPLE_RATE = 16000
 FRAME_MS = 30
-FRAME_BYTES = int(SAMPLE_RATE * FRAME_MS / 1000) * 2  # 16-bit mono PCM (960 bytes)
-SILENCE_TAIL_MS = 550     # stop recording after 550ms of trailing silence
-MIN_SPEECH_MS = 250       # ignore noise blips shorter than 250ms
-MAX_RECORD_MS = 25000     # maximum recording duration cap
-SILENCE_RMS_THRESHOLD = 0.032  # tuned to cut background room noise/breathing cleanly
+FRAME_BYTES = int(SAMPLE_RATE * FRAME_MS / 1000) * 2
+SILENCE_TAIL_MS = 550
+MIN_SPEECH_MS = 250
+MAX_RECORD_MS = 25000
+SILENCE_RMS_THRESHOLD = 0.032
 CPU_THREADS = min(8, max(4, os.cpu_count() or 4))
 
 if cuda_available:
@@ -88,7 +58,9 @@ else:
     DEFAULT_MODEL = "small"
 
 MODEL_SIZE = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_MODEL
-MODELS_DIR = os.path.expanduser(os.environ.get("TRANSLATOR_MODELS_DIR", "~/.local/share/translator/models"))
+MODELS_DIR = os.path.expanduser(
+    os.environ.get("TRANSLATOR_MODELS_DIR", "~/.local/share/translator/models")
+)
 POLISH_MODEL_PATH = os.path.join(MODELS_DIR, "qwen2.5-1.5b-instruct-q4_k_m.gguf")
 
 
@@ -107,27 +79,21 @@ llm_ready = threading.Event()
 
 
 def load_models_bg() -> None:
+    """Loads speech recognition and text polish models in background threads."""
     log("LOADING")
 
     def load_whispers():
         try:
             from faster_whisper import WhisperModel
-            # Load "base" first (~0.15s on CUDA, ~0.6s on CPU) for fast real-time streaming
+
             stream_holder["model"] = WhisperModel(
-                "base",
-                device=DEVICE,
-                compute_type=COMPUTE_TYPE,
-                cpu_threads=CPU_THREADS
+                "base", device=DEVICE, compute_type=COMPUTE_TYPE, cpu_threads=CPU_THREADS
             )
             stream_ready.set()
             log("STREAM_READY")
 
-            # Load final transcription model ("medium" on CUDA ~0.7s, "small" on CPU)
             final_holder["model"] = WhisperModel(
-                MODEL_SIZE,
-                device=DEVICE,
-                compute_type=COMPUTE_TYPE,
-                cpu_threads=CPU_THREADS
+                MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE, cpu_threads=CPU_THREADS
             )
             final_ready.set()
             log("MODEL_READY")
@@ -139,6 +105,7 @@ def load_models_bg() -> None:
         if os.path.exists(POLISH_MODEL_PATH):
             try:
                 from llama_cpp import Llama
+
                 llm_holder["model"] = Llama(
                     model_path=POLISH_MODEL_PATH,
                     n_ctx=512,
@@ -166,6 +133,7 @@ stop_event = threading.Event()
 
 
 def polish_text(text: str) -> str:
+    """Cleans speech disfluencies, punctuation, and typos using local LLM."""
     text = text.strip()
     if not text:
         return ""
@@ -176,7 +144,7 @@ def polish_text(text: str) -> str:
     if not llm_holder["model"]:
         return text
 
-    is_uk = any('\u0400' <= c <= '\u04FF' for c in text)
+    is_uk = any("\u0400" <= c <= "\u04ff" for c in text)
     if is_uk:
         prompt = f"""<|im_start|>system
 Ти — автокоректор та редактор усного тексту.
@@ -219,9 +187,9 @@ Can you send me the link?<|im_end|>
         cleaned = res["choices"][0]["text"].strip()
         cleaned = cleaned.strip("\"' \n")
         if cleaned.startswith("Вихід:"):
-            cleaned = cleaned[len("Вихід:"):].strip()
+            cleaned = cleaned[len("Вихід:") :].strip()
         if cleaned.startswith("Output:"):
-            cleaned = cleaned[len("Output:"):].strip()
+            cleaned = cleaned[len("Output:") :].strip()
         return cleaned if cleaned else text
     except Exception as e:
         log(f"ERROR:Polish inference error: {e}")
@@ -229,6 +197,7 @@ Can you send me the link?<|im_end|>
 
 
 def record_and_transcribe(language: str | None) -> None:
+    """Captures PipeWire audio until silence and transcribes with Whisper."""
     try:
         proc = subprocess.Popen(
             ["pw-record", "--rate", str(SAMPLE_RATE), "--channels", "1", "--format", "s16", "-"],
@@ -250,17 +219,21 @@ def record_and_transcribe(language: str | None) -> None:
     recording_active = threading.Event()
     recording_active.set()
 
-    initial_prompt = "Це транскрипція української або англійської мови." if language == "uk" else "English and Ukrainian voice speech."
+    initial_prompt = (
+        "Це транскрипція української або англійської мови."
+        if language == "uk"
+        else "English and Ukrainian voice speech."
+    )
 
-    # Background streaming worker: transcribes partial audio every ~300ms without blocking audio capture
     def streaming_worker():
+        """Streams partial transcription results at regular intervals while speech is active."""
         last_processed_len = 0
         while recording_active.is_set():
             time.sleep(0.30)
             if not started_speech or not stream_ready.is_set():
                 continue
             cur_len = len(frames)
-            if cur_len - last_processed_len < FRAME_BYTES * 8:  # need at least ~240ms new audio
+            if cur_len - last_processed_len < FRAME_BYTES * 8:
                 continue
             last_processed_len = cur_len
             audio_snap = np.frombuffer(bytes(frames), dtype=np.int16).astype(np.float32) / 32768.0
@@ -299,14 +272,12 @@ def record_and_transcribe(language: str | None) -> None:
             frame_count += 1
 
             samples = np.frombuffer(chunk, dtype=np.int16).astype(np.float32) / 32768.0
-            rms = float(np.sqrt(np.mean(samples ** 2)))
+            rms = float(np.sqrt(np.mean(samples**2)))
 
-            # Emit volume level every ~60ms (every 2 frames)
             if frame_count % 2 == 0:
                 visual_level = min(1.0, max(0.0, (rms - 0.01) / 0.15))
                 log(f"LEVEL:{visual_level:.2f}")
 
-            # Voice activity and trailing silence detection
             if rms >= SILENCE_RMS_THRESHOLD:
                 speech_ms += FRAME_MS
                 silence_ms = 0
@@ -331,7 +302,6 @@ def record_and_transcribe(language: str | None) -> None:
         log("RESULT:")
         return
 
-    # Wait for the high-accuracy model if still loading
     if not final_ready.is_set():
         log("WAITING_MODEL")
         final_ready.wait()
@@ -375,7 +345,7 @@ def main() -> None:
         elif cmd == "STOP":
             stop_event.set()
         elif cmd.startswith("POLISH:"):
-            raw_text = cmd[len("POLISH:"):].strip()
+            raw_text = cmd[len("POLISH:") :].strip()
 
             def run_polish(t=raw_text):
                 cleaned = polish_text(t)
@@ -386,4 +356,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
