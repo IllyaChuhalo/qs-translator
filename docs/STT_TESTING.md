@@ -1,16 +1,16 @@
 # STT test — setup
 
-## 1. Системні залежності
+## 1. System dependencies
 
 ```bash
-# pw-record йде з pipewire, у тебе він точно вже стоїть
+# pw-record ships with pipewire, which you most likely already have installed
 which pw-record || sudo pacman -S pipewire
 ```
 
-## 2. Python-оточення
+## 2. Python environment
 
-Arch позначає системний pip як "externally managed" (PEP 668), тож venv —
-найпростіший шлях без танців з `--break-system-packages`:
+Arch marks the system pip as "externally managed" (PEP 668), so a venv is the
+simplest way without resorting to `--break-system-packages`:
 
 ```bash
 python -m venv ~/.local/share/translator-stt-venv
@@ -18,34 +18,35 @@ source ~/.local/share/translator-stt-venv/bin/activate.fish  # bash: bin/activat
 pip install faster-whisper
 ```
 
-## 3. Запуск тесту
+## 3. Running the test
 
 ```bash
 source ~/.local/share/translator-stt-venv/bin/activate
 python record_transcribe.py small uk
 ```
 
-- Перший аргумент — розмір моделі (`tiny`/`base`/`small`/`medium`/`large-v3`).
-  Почни з `small` — непоганий баланс якість/швидкість на CPU. Якщо забагато
-  тупить на твоєму залізі — спробуй `base`. Якщо хочеш максимальну якість
-  і є час почекати — `medium`.
-- Другий аргумент — мова (`uk` або `en`). Можна взагалі не передавати —
-  тоді whisper сам визначить мову на льоту (варто перевірити обидва
-  варіанти: з підказкою мови і без, порівняти якість і швидкість).
-- Перший запуск скачає модель (кешується в `~/.cache/huggingface`, наступні
-  запуски вже миттєві на завантаженні моделі).
+- The first argument is the model size (`tiny`/`base`/`small`/`medium`/`large-v3`).
+  Start with `small` — a decent quality/speed balance on CPU. If it is too slow
+  on your hardware, try `base`. If you want maximum quality and have time to
+  wait, use `medium`.
+- The second argument is the language (`uk` or `en`). You can omit it
+  entirely — whisper will then detect the language on the fly (worth trying
+  both ways: with and without a language hint, comparing quality and speed).
+- The first run downloads the model (cached in `~/.cache/huggingface`; later
+  runs load the model almost instantly).
 
-Говориш після "🎙️ Recording..." — тиснеш Enter, коли договорив — і бачиш
-розпізнаний текст, час транскрипції та яку мову модель визначила сама.
+Speak after "🎙️ Recording..." and press Enter when you are done — you will see
+the recognized text, the transcription time, and the language the model
+detected on its own.
 
-## Що оцінити
+## What to evaluate
 
-- Якість розпізнавання твоєї вимови (uk і en окремо)
-- Швидкість транскрипції відносно тривалості запису (наприклад, 3с мовлення
-  за скільки секунд розпізналось)
-- Чи `small` вистачає, чи треба `medium`
-- Як модель поводиться з кодовим перемиканням (якщо в одній фразі змішуєш
-  українську з англійськими термінами)
+- Recognition quality for your pronunciation (uk and en separately)
+- Transcription speed relative to the recording length (for example, how many
+  seconds it took to recognize 3 s of speech)
+- Whether `small` is enough or `medium` is needed
+- How the model handles code-switching (if you mix Ukrainian with English
+  terms in a single phrase)
 
-Як приймеш рішення по моделі — вплетемо запис/транскрипцію в саму кнопку
-мікрофона у `shell.qml`.
+Once you decide on the model, we will wire recording/transcription into the
+microphone button itself in `shell.qml`.
