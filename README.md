@@ -170,7 +170,7 @@ npm run lint       # Run Python, QML, and formatting checks
 npm run format     # Auto-format all Python, QML, and markdown files
 ```
 
-See [docs/conventions.md](docs/conventions.md) for branch naming, commit format, and PR guidelines.
+See [docs/conventions.md](docs/conventions.md) for issue templates, branch naming (`<type>/<optional_scope>-<issue_number>-<description>`), commit format (`<type>(<optional_scope>): <message> #<issue_number>`), and PR guidelines.
 
 ---
 
