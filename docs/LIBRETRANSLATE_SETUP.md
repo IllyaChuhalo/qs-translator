@@ -1,6 +1,6 @@
-# LibreTranslate — локальний переклад без лімітів
+# LibreTranslate — local translation without limits
 
-## 1. Підняти сервер
+## 1. Start the server
 
 ```bash
 docker run -d --name libretranslate \
@@ -10,19 +10,20 @@ docker run -d --name libretranslate \
   libretranslate/libretranslate
 ```
 
-`LT_LOAD_ONLY=uk,en` — вантажить лише потрібну пару мов, а не весь набір
-(~30 мов) — суттєво швидший старт і менше диска/RAM.
+`LT_LOAD_ONLY=uk,en` loads only the required language pair instead of the
+whole set (~30 languages), which means a much faster startup and less disk/RAM
+usage.
 
-Перший запуск качає моделі (кілька хвилин, кілька сотень МБ). Перевірити,
-що піднялось:
+The first run downloads the models (a few minutes, a few hundred MB). Check
+that it is up:
 
 ```bash
 curl -s http://localhost:5000/languages
 ```
 
-Має повернути JSON зі списком `uk`/`en`.
+It should return JSON with the `uk`/`en` languages.
 
-## 2. Швидкий тест перекладу
+## 2. Quick translation test
 
 ```bash
 curl -s -X POST http://localhost:5000/translate \
@@ -30,8 +31,8 @@ curl -s -X POST http://localhost:5000/translate \
   -d '{"q": "Привіт, як справи?", "source": "uk", "target": "en", "format": "text"}'
 ```
 
-## 3. Автозапуск при вході в систему
+## 3. Autostart on login
 
-`--restart unless-stopped` вище вже подбає про це, поки в тебе увімкнений
-Docker daemon при старті системи (`systemctl enable docker`, якщо ще не
-ввімкнено).
+`--restart unless-stopped` above already takes care of this, as long as the
+Docker daemon is enabled at system startup (`systemctl enable docker`, if it is
+not enabled yet).
