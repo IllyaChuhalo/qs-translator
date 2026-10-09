@@ -10,6 +10,7 @@ Every change starts with an issue. Use one of the issue templates (**New issue**
 
 - **Bug report** — something is broken or behaves unexpectedly.
 - **Suggestion / Proposal** — a feature, improvement, or change.
+- **Chore** — maintenance work: docs, tooling, refactoring, dependency updates.
 
 The issue number is then used in the branch name, every commit, and the pull request.
 

@@ -1,0 +1,47 @@
+name: Chore
+description: Maintenance work such as docs, tooling, refactoring, or dependency updates
+title: "[Chore]: "
+labels: ["chore"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of work
+      options:
+        - docs
+        - refactor
+        - chore (tooling, linters, config)
+        - deps
+        - ci
+        - perf
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: What needs to be done
+      description: Describe the maintenance task.
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Why
+      description: Why is this needed now?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Affected areas
+      description: Files, directories, or scopes (`qs`, `stt`, `scripts`, `docs`, ...).
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] ...
+    validations:
+      required: false
